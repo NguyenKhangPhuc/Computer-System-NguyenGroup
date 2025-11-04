@@ -4,10 +4,11 @@
 #include <FreeRTOS.h>
 #include <queue.h>
 #include <task.h>
+#include <string.h>
 
 #include "tkjhat/sdk.h"
 // Program global state to manage the flow of the program
-enum state {IDLE=1, WAITING_DATA, DATA_READY, SEND_DATA, SEND_REQ_SATISFIED};
+enum state {IDLE=1, WAITING_DATA, DATA_READY, SEND_DATA, SEND_REQ_SATISFIED, RECEIVED_DATA};
 // Starting with IDLE state
 enum state programState=IDLE;
 
@@ -17,6 +18,9 @@ struct MorseMessage {
    int currentMorseStringPosition; // Current index in the morse string
    char morseString[120]; // Strring to store the morse received.
 };
+
+// Global variable
+struct MorseMessage message = {0};
 
 // Initialize the variable with struct type above to be a default value = 0.
 struct MorseMessage imuMorseMessage = {0};
@@ -30,6 +34,10 @@ static void serial_send_task(void *arg);
 static void btn_fxn(uint gpio, uint32_t eventMask);
 // Function to convert data from IMU to morse character
 void convert_to_morse_character(float *accleX, float *accelY, float *accelZ);
+// Serial receive function
+static void receive_task(void *arg);
+void rgb_task(void *pvParameters);
+void buzzer_task(void *pvParameters);
 
 int main() {
     // Initialize the stdio to be able to send and receive data.
@@ -47,6 +55,8 @@ int main() {
     // Initialize the button1,button2 to be able to use it
     init_button1();
     init_button2();
+    init_rgb_led();
+    init_buzzer();
     // Set the interruption for both button1, button2 using together btn_fxn function.
     gpio_set_irq_enabled_with_callback(BUTTON1, GPIO_IRQ_EDGE_RISE, true, btn_fxn);
     gpio_set_irq_enabled(BUTTON2, GPIO_IRQ_EDGE_RISE, true);
@@ -55,10 +65,15 @@ int main() {
     TaskHandle_t serialSendTask;
     // TaskHandle for imu_task function
     TaskHandle_t hIMUTask = NULL;
+    TaskHandle_t hReceiveTask;
+    
 
     // Create all task with priority 2, no args.
     BaseType_t result = xTaskCreate(serial_send_task, "serialSendTask", 2048, NULL, 2, &serialSendTask);
     xTaskCreate(imu_task, "IMUTask", 1024, NULL, 2, &hIMUTask);
+    xTaskCreate(receive_task, "receive", 1024, NULL, 2, &hReceiveTask);
+    //xTaskCreate(rgb_task, "RGBTask", 256, NULL, 2, NULL);
+    xTaskCreate(buzzer_task,"BuzzerTask", 1024, NULL, 2, NULL );
     
     // Start to run and schedule the task
     vTaskStartScheduler();
@@ -176,5 +191,124 @@ void convert_to_morse_character(float *accelX, float *accelY, float *accelZ){
         printf("Received Morse character '-' and go back to DATA_READY\n");
         // Set the programState to be DATA_READY to be able to send space
         programState = DATA_READY;
+    }
+}
+
+static void receive_task(void *arg){
+    (void)arg;
+    size_t index = 0;
+    
+    while (1){
+        //OPTION 1
+        // Using getchar_timeout_us https://www.raspberrypi.com/documentation/pico-sdk/runtime.html#group_pico_stdio_1ga5d24f1a711eba3e0084b6310f6478c1a
+        // take one char per time and store it in line array, until reeceived the \n
+        // The application should instead play a sound, or blink a LED. 
+        int c = getchar_timeout_us(0);
+        if (c != PICO_ERROR_TIMEOUT){// I have received a character
+            if (c == '\r') continue; // ignore CR, wait for LF if (ch == '\n') { line[len] = '\0';
+            if (c == '\n'){
+                // terminate and process the collected line
+                message.morseString[message.currentMorseStringPosition] = '\0';
+                message.currentMorseStringPosition = 0;
+                programState = RECEIVED_DATA;
+                printf("Received Morse String %s",message.morseString);
+                
+                vTaskDelay(pdMS_TO_TICKS(100)); // Wait for new message
+                
+            }
+            else if(index < 174 - 1){
+                message.morseString[message.currentMorseStringPosition] = (char)c;
+                message.currentMorseStringPosition++;
+            }
+            else { //Overflow: print and restart the buffer with the new character. 
+                message.morseString[message.currentMorseStringPosition] = '\0';
+                printf("Receive morse code: %s\n", message.morseString);
+                message.currentMorseStringPosition = 0; 
+                message.morseString[message.currentMorseStringPosition] = (char)c; 
+                message.currentMorseStringPosition++;
+            }
+        }
+        else {
+            vTaskDelay(pdMS_TO_TICKS(100)); // Wait for new message
+        }
+        //OPTION 2. Use the whole buffer. 
+        /*absolute_time_t next = delayed_by_us(get_absolute_time,500);//Wait 500 us
+        int read = stdio_get_until(line,INPUT_BUFFER_SIZE,next);
+        if (read == PICO_ERROR_TIMEOUT){
+            vTaskDelay(pdMS_TO_TICKS(100)); // Wait for new message
+        }
+        else {
+            line[read] = '\0'; //Last character is 0
+            printf("__[RX] \"%s\"\n__", line);
+            vTaskDelay(pdMS_TO_TICKS(50));
+        }*/
+    }
+
+
+}
+
+void rgb_task(void *pvParameters) {
+    (void)pvParameters;
+
+    while (1) {
+    if (programState == RECEIVED_DATA) {
+        for (int i=0; i < strlen(message.morseString); i++) {
+            printf ("Read morse character %c", message.morseString[i]);
+            if (message.morseString[i] == '.') {
+                rgb_led_write(0, 0, 255);
+                vTaskDelay(pdMS_TO_TICKS(1500));
+                rgb_led_write(255, 255, 255);
+                vTaskDelay(pdMS_TO_TICKS(300));
+            }
+            else if (message.morseString[i] == '-') {
+                rgb_led_write(0, 255, 0);
+                vTaskDelay(pdMS_TO_TICKS(1500));
+                rgb_led_write(255, 255, 255);
+                vTaskDelay(pdMS_TO_TICKS(300));
+            }
+            else if (message.morseString[i] == ' ') {
+                rgb_led_write(255, 0, 0);
+                vTaskDelay(pdMS_TO_TICKS(1500));
+                rgb_led_write(255, 255, 255);
+                vTaskDelay(pdMS_TO_TICKS(300));
+            }
+        }
+        programState = IDLE;
+    }
+        
+
+        // rgb_led_write(20, 30, 255);
+        // vTaskDelay(500);
+        // rgb_led_write(255, 30, 10);
+        // vTaskDelay(500);
+        // rgb_led_write(50, 255, 10);
+        // vTaskDelay(500);
+    }
+}
+
+void buzzer_task(void *pvParameters) {
+    (void)pvParameters;
+
+    while (1) {
+        if (programState == RECEIVED_DATA) {
+            for(int i =0; i< strlen(message.morseString); i++){
+                if (message.morseString[i] == '.') {
+                    buzzer_play_tone(440, 500);
+                    vTaskDelay(pdMS_TO_TICKS(1000));
+                }
+                else if (message.morseString[i] == '-') {
+                    buzzer_play_tone(440, 1000);
+                    vTaskDelay(pdMS_TO_TICKS(1000));
+                }
+                else if (message.morseString[i] == ' ') {
+                    vTaskDelay(pdMS_TO_TICKS(1000));
+                }
+
+            }
+            programState = IDLE;
+ 
+        }
+        
+        vTaskDelay(100);
     }
 }
