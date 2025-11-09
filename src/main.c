@@ -5,13 +5,14 @@
 #include <FreeRTOS.h>
 #include <queue.h>
 #include <task.h>
+#include <string.h>
 
 #include "tkjhat/sdk.h"
 
 
 
 // Program global state to manage the flow of the program
-enum state {IDLE=1, WAITING_DATA, DATA_READY, SEND_DATA, SPACES_REQUIREMENTS_SATISFIED, DISPLAY};
+enum state {IDLE=1, WAITING_DATA, DATA_READY, SEND_DATA, SPACES_REQUIREMENTS_SATISFIED, DISPLAY, RECEIVED_DATA};
 // Starting with IDLE state
 enum state programState=IDLE;
 
@@ -35,6 +36,9 @@ struct Message {
    char message[120]; // Strring to store the morse received.
 };
 
+// Global variable
+struct MorseMessage message = {0};
+
 // Initialize the variable with struct type above to be a default value = 0.
 struct Message imuMorseMessage = {0};
 struct Message serialReceivedMorseMessage = {0};
@@ -50,6 +54,9 @@ static void serial_send_task(void *arg);
 static void btn_fxn(uint gpio, uint32_t eventMask);
 // Function to convert data from IMU to morse character
 void convert_to_morse_character(float *accleX, float *accelY, float *accelZ);
+// Serial receive function
+void rgb_task(void *pvParameters);
+void buzzer_task(void *pvParameters);
 void translate_receives_morse_codes(void);
 char find_letter_from_morse_code(char *morseCode);
 static void buzzer_task(void *arg);
@@ -73,6 +80,8 @@ int main() {
     // Initialize the button1,button2 to be able to use it
     init_button1();
     init_button2();
+    init_rgb_led();
+    init_buzzer();
 
     init_display();
     // Check the connection the ICM-42670 sensor (0=success, otherwise fail the connection).
@@ -94,12 +103,17 @@ int main() {
     TaskHandle_t serialSendTask;
     // TaskHandle for imu_task function
     TaskHandle_t hIMUTask = NULL;
+    TaskHandle_t hReceiveTask;
+    
 
     TaskHandle_t buzzerTask = NULL;
     TaskHandle_t serialReceiveTask = NULL;
     TaskHandle_t lcdDisplay = NULL;
     // Create all task with priority 2, no args.
     BaseType_t result = xTaskCreate(serial_send_task, "serialSendTask", 2048, NULL, 2, &serialSendTask);
+    //xTaskCreate(rgb_task, "RGBTask", 256, NULL, 2, NULL);
+    xTaskCreate(buzzer_task,"BuzzerTask", 1024, NULL, 2, NULL );
+    
     xTaskCreate(imu_task, "IMUTask", 1024, NULL, 3, &hIMUTask);
     // xTaskCreate(buzzer_task, "buzzerTask", 1024, NULL, 2, &buzzerTask);
     xTaskCreate(serial_receive_task, "serialReceiveTask", 1024, NULL, 2, &serialReceiveTask);
@@ -212,6 +226,71 @@ void convert_to_morse_character(float *accelX, float *accelY, float *accelZ){
     }
 }
 
+void rgb_task(void *pvParameters) {
+    (void)pvParameters;
+
+    while (1) {
+    if (programState == RECEIVED_DATA) {
+        for (int i=0; i < strlen(message.morseString); i++) {
+            printf ("Read morse character %c", message.morseString[i]);
+            if (message.morseString[i] == '.') {
+                rgb_led_write(0, 0, 255);
+                vTaskDelay(pdMS_TO_TICKS(1500));
+                rgb_led_write(255, 255, 255);
+                vTaskDelay(pdMS_TO_TICKS(300));
+            }
+            else if (message.morseString[i] == '-') {
+                rgb_led_write(0, 255, 0);
+                vTaskDelay(pdMS_TO_TICKS(1500));
+                rgb_led_write(255, 255, 255);
+                vTaskDelay(pdMS_TO_TICKS(300));
+            }
+            else if (message.morseString[i] == ' ') {
+                rgb_led_write(255, 0, 0);
+                vTaskDelay(pdMS_TO_TICKS(1500));
+                rgb_led_write(255, 255, 255);
+                vTaskDelay(pdMS_TO_TICKS(300));
+            }
+        }
+        programState = IDLE;
+    }
+        
+
+        // rgb_led_write(20, 30, 255);
+        // vTaskDelay(500);
+        // rgb_led_write(255, 30, 10);
+        // vTaskDelay(500);
+        // rgb_led_write(50, 255, 10);
+        // vTaskDelay(500);
+    }
+}
+
+void buzzer_task(void *pvParameters) {
+    (void)pvParameters;
+
+    while (1) {
+        if (programState == RECEIVED_DATA) {
+            for(int i =0; i< strlen(message.morseString); i++){
+                if (message.morseString[i] == '.') {
+                    buzzer_play_tone(440, 500);
+                    vTaskDelay(pdMS_TO_TICKS(1000));
+                }
+                else if (message.morseString[i] == '-') {
+                    buzzer_play_tone(440, 1000);
+                    vTaskDelay(pdMS_TO_TICKS(1000));
+                }
+                else if (message.morseString[i] == ' ') {
+                    vTaskDelay(pdMS_TO_TICKS(1000));
+                }
+
+            }
+            programState = IDLE;
+ 
+        }
+        
+        vTaskDelay(100);
+    }
+}
 void translate_receives_morse_codes(){
     printf("Start\n");
     struct MorseAlphabet singleMorseCode = {0};
