@@ -93,7 +93,7 @@ static void receive_task(void *arg){
             if (c == '\r') continue; // ignore CR, wait for LF if (ch == '\n') { line[len] = '\0';
             if (c == '\n'){
                 // terminate and process the collected line
-                line[index] = '\0'; 
+                line[index] = '\0';
                 printf("__[RX]:\"%s\"__\n", line); //Print as debug in the output
                 index = 0;
                 vTaskDelay(pdMS_TO_TICKS(100)); // Wait for new message
