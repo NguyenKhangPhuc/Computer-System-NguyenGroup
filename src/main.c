@@ -6,6 +6,8 @@
 #include <queue.h>
 #include <task.h>
 #include <string.h>
+#include <pico/cyw43_arch.h>
+#include <math.h>
 
 #include "tkjhat/sdk.h"
 
@@ -36,6 +38,14 @@ struct Message {
    char message[120]; // Strring to store the morse received.
 };
 
+struct InitialTemp {
+    float temp;
+    int isFirstGet;
+};
+
+struct InitialTemp tempThreshold = {0};
+
+
 
 // Initialize the variable with struct type above to be a default value = 0.
 struct Message imuMorseMessage = {0};
@@ -51,13 +61,13 @@ static void serial_send_task(void *arg);
 // Function to be called when button interruption appear
 static void btn_fxn(uint gpio, uint32_t eventMask);
 // Function to convert data from IMU to morse character
-void convert_to_morse_character(float *accleX, float *accelY, float *accelZ);
+void convert_to_morse_character(float *ax, float *ay, float *az, float *gx, float *gy, float *gz, float *temp);
 // Serial receive function
 void rgb_task(void *pvParameters);
 void buzzer_task(void *pvParameters);
 void translate_receives_morse_codes(void);
 char find_letter_from_morse_code(char *morseCode);
-// static void buzzer_task(void *arg);
+static void buzzer_music_play();
 static void lcd_display_task(void *args);
 static void serial_receive_task(void *arg);
 static void display_controller_task(void *args);
@@ -135,10 +145,16 @@ void imu_task(void *pvParameters){
         // Read the data received from Accelerometer and Gyroscope
             if (programState == WAITING_DATA){
                 if (ICM42670_read_sensor_data(&ax, &ay, &az,&gx,&gy,&gz,&temp) == 0){
-                // If the programState is WAITING_DATA -> convert the received data to morse code and store it in the morse string.
-                    printf("__Accel: X=%f, Y=%f, Z=%f | Gyro: X=%f, Y=%f, Z=%f| Temp: %2.2f°C__\n", ax, ay, az, gx, gy, gz, temp);
+                    printf("__Accel: X=%f, Y=%f, Z=%f | Gyro: X=%f, Y=%f, Z=%f| Temp: %2.2f°C  threshold: %2.2f°C__\n", ax, ay, az, gx, gy, gz, temp, tempThreshold.temp);
+                    // If the programState is WAITING_DATA -> convert the received data to morse code and store it in the morse string.
+                    if (tempThreshold.isFirstGet == 0 ){
+                        tempThreshold.isFirstGet=1;
+                        tempThreshold.temp = temp;
+                    }
+                    
                     // Function to convert received data to morse character.
-                    convert_to_morse_character(&ax, &ay, &az);       
+                    convert_to_morse_character(&ax, &ay, &az, &gx, &gy, &gz, &temp);
+                    
                 }else {
                     printf("__Failed to read data from IMU sensor__\n");
                 }
@@ -206,9 +222,11 @@ static void btn_fxn(uint gpio, uint32_t eventMask){
     }
 }
 
-void convert_to_morse_character(float *accelX, float *accelY, float *accelZ){
-    // Check if the position of the IMU sensor match the condition
-    if ((*accelX > -0.1 && *accelX < 0.1) && (*accelY > -0.1 && *accelY < 0.1) && (*accelZ > 0.9 && *accelZ < 1.1)){
+void convert_to_morse_character(float *ax, float *ay, float *az, float *gx, float *gy, float *gz, float *temp){
+    if (fabs(*gx) > 200  && fabs(*gy) > 200 && fabs(*gz) > 200){
+        buzzer_music_play();
+        programState = IDLE;
+    }else if ((*ax > -1.1 && *ax < -0.9) && (*ay > -0.1 && *ay < 0.1) && (*az > -0.1 && *az < 0.1) && *temp > tempThreshold.temp + 1){
         // If the position of imu is place horizontally -> set the current position of the morse string to be a dot.
         imuMorseMessage.message[imuMorseMessage.currentIndex] = '.';
         // Increase the morse string index by 1
@@ -216,7 +234,25 @@ void convert_to_morse_character(float *accelX, float *accelY, float *accelZ){
         printf("__Received Morse character '.' and go back to DATA_READY__\n");
         // Set the programState to be DATA_READY to be able to send space
         programState = DATA_READY;
-    }else if ( (*accelX > -0.1 && *accelX < 0.1) && (*accelZ > -0.1 && *accelZ < 0.1) && (*accelY < -0.9 && *accelY > -1.1)){
+    }else if ((*ax > 0.9 && *ax < 1.1) && (*ay > -0.1 && *ay < 0.1) && (*az > -0.1 && *az < 0.1) && *temp > tempThreshold.temp + 1){
+        // If the position of imu is place horizontally -> set the current position of the morse string to be a dash.
+        imuMorseMessage.message[imuMorseMessage.currentIndex] = '-';
+        // Increase the morse string index by 1
+        imuMorseMessage.currentIndex += 1;
+        printf("__Received Morse character '-' and go back to DATA_READY__\n");
+        // Set the programState to be DATA_READY to be able to send space
+        programState = DATA_READY;
+    }
+    // Check if the position of the IMU sensor match the condition
+    if ((*ax > -0.1 && *ax < 0.1) && (*ay > -0.1 && *ay < 0.1) && (*az > 0.9 && *az < 1.1)){
+        // If the position of imu is place horizontally -> set the current position of the morse string to be a dot.
+        imuMorseMessage.message[imuMorseMessage.currentIndex] = '.';
+        // Increase the morse string index by 1
+        imuMorseMessage.currentIndex += 1;
+        printf("__Received Morse character '.' and go back to DATA_READY__\n");
+        // Set the programState to be DATA_READY to be able to send space
+        programState = DATA_READY;
+    }else if ( (*ax > -0.1 && *ax < 0.1) && (*az > -0.1 && *az < 0.1) && (*ay < -0.9 && *ay > -1.1)){
         // If the position of imu is place horizontally -> set the current position of the morse string to be a dash.
         imuMorseMessage.message[imuMorseMessage.currentIndex] = '-';
         // Increase the morse string index by 1
@@ -294,16 +330,7 @@ void translate_receives_morse_codes(){
     struct MorseAlphabet singleMorseCode = {0};
     for (int i = 0; i < 120; i++){
         if (serialReceivedMorseMessage.message[i] == '\0'){
-            singleMorseCode.morseCode[singleMorseCode.currMorseCodeIndex] = '\0';
-            singleMorseCode.currMorseCodeIndex = 0;
-            char translatedLetter = find_letter_from_morse_code(singleMorseCode.morseCode);
-            translatedMessage.message[translatedMessage.currentIndex] = translatedLetter;
-            translatedMessage.currentIndex +=1;
-            translatedMessage.message[translatedMessage.currentIndex] = '\n';
-            translatedMessage.currentIndex +=1;
-            translatedMessage.message[translatedMessage.currentIndex] = '\0';
-            translatedMessage.currentIndex = 0;
-            break;
+            
         }
         if (serialReceivedMorseMessage.message[i] != ' '){
             
@@ -311,8 +338,16 @@ void translate_receives_morse_codes(){
             singleMorseCode.currMorseCodeIndex+= 1;
         }else {
             if (serialReceivedMorseMessage.message[i - 1] == ' '){
-                translatedMessage.message[translatedMessage.currentIndex] = ' ';
-                translatedMessage.currentIndex +=1;
+                if (serialReceivedMorseMessage.message[i + 1] == '\0'){
+                    translatedMessage.message[translatedMessage.currentIndex] = '\n';
+                    translatedMessage.currentIndex +=1;
+                    translatedMessage.message[translatedMessage.currentIndex] = '\0';
+                    translatedMessage.currentIndex = 0;
+                    break;
+                }else {
+                    translatedMessage.message[translatedMessage.currentIndex] = ' ';
+                    translatedMessage.currentIndex +=1;
+                }
             }else{
                 singleMorseCode.morseCode[singleMorseCode.currMorseCodeIndex] = '\0';
                 singleMorseCode.currMorseCodeIndex = 0;
@@ -334,31 +369,24 @@ char find_letter_from_morse_code(char *morseCode){
     return 'n';
 }
 
-// static void buzzer_task(void *arg){
-//     (void) arg;
+static void buzzer_music_play(){
+    int melody[25] = {
+        330, 330, 330, 330, 330, 330, 330, 392, 262, 294, 330, 349, 349, 349, 330, 330,
+        330, 330, 330, 330, 330, 392, 262, 294, 330
+    };
 
-//     init_buzzer();
-//     printf("__Initializing buzzer__\n");
-//     int melody[25] = {
-//         330, 330, 330, 330, 330, 330, 330, 392, 262, 294, 330, 349, 349, 349, 330, 330,
-//         330, 330, 330, 330, 330, 392, 262, 294, 330
-//     };
+    int durations[25] = {
+        250, 250, 500, 250, 250, 500, 250, 250, 250, 250, 500, 250, 250, 500, 250, 250,
+        250, 250, 500, 250, 250, 500, 250, 250, 500
+    };
 
-//     int durations[25] = {
-//         250, 250, 500, 250, 250, 500, 250, 250, 250, 250, 500, 250, 250, 500, 250, 250,
-//         250, 250, 500, 250, 250, 500, 250, 250, 500
-//     };
-
-//     int length = sizeof(melody)/ sizeof(melody[0]);
-//     while(1){
-//         printf("__Music Play __\n");
-//         for (int i = 0 ; i < length; i++){
-//             buzzer_play_tone(melody[i], durations[i]);
-//             sleep_ms(50);
-//         }
-//         vTaskDelay(pdMS_TO_TICKS(5000));
-//     }
-// }
+    int length =sizeof(melody) / sizeof(melody[0]);
+    printf("__Music Play __\n");
+    for (int i = 0 ; i < length; i++){
+        buzzer_play_tone(melody[i], durations[i]);
+        sleep_ms(50);
+    }
+}
 
 static void serial_receive_task(void *arg){
     (void) arg;
@@ -376,7 +404,7 @@ static void serial_receive_task(void *arg){
                 serialReceivedMorseMessage.message[serialReceivedMorseMessage.currentIndex] = '\0';
                 serialReceivedMorseMessage.currentIndex = 0;
                 programState = DISPLAY;
-                printf("__Received String__ %s\n",  serialReceivedMorseMessage.message);
+                printf("__Received String %s__\n",  serialReceivedMorseMessage.message);
             }else {
                 serialReceivedMorseMessage.message[serialReceivedMorseMessage.currentIndex] = receivedChar;
                 serialReceivedMorseMessage.currentIndex += 1;
@@ -399,11 +427,17 @@ static void lcd_display_task(void *args){
             int length = strlen(translatedMessage.message);
             char displayString[5];
             clear_display();
-            for (int i = 0 ; i < length - 5; i++){
-                sprintf(displayString, "%c%c%c%c%c", translatedMessage.message[i], translatedMessage.message[i + 1], translatedMessage.message[i + 2], translatedMessage.message[i + 3], translatedMessage.message[i + 4], translatedMessage.message[i + 4]);
-                write_text(displayString);
-                vTaskDelay(pdMS_TO_TICKS(50));
+            if (length <=  5){
+                write_text(translatedMessage.message);
+                vTaskDelay(pdMS_TO_TICKS(500));
                 clear_display();
+            }else {
+                for (int i = 0 ; i < length - 5; i++){
+                    sprintf(displayString, "%c%c%c%c%c", translatedMessage.message[i], translatedMessage.message[i + 1], translatedMessage.message[i + 2], translatedMessage.message[i + 3], translatedMessage.message[i + 4], translatedMessage.message[i + 4]);
+                    write_text(displayString);
+                    vTaskDelay(pdMS_TO_TICKS(50));
+                    clear_display();
+                }
             }
             write_text("Waiting...");
             xTaskNotifyGive(displayControllerTask);
@@ -427,4 +461,25 @@ static void display_controller_task(void *args){
             printf("__3 task display finished__\n");
         }
     }
+}
+
+
+void wirelessTask(void *pvParams) {
+    // Initializing CYW43439
+    if(cyw43_arch_init()) {
+        printf("Wireless init failed\n");
+    }
+    else {
+        // Enabling "Station"-mode, where we can connect to wireless networks
+        cyw43_arch_enable_sta_mode();
+        // Connecting to the open panoulu-network (no password needed)
+        // We try to connect for 30 seconds before printing an error message
+        if(cyw43_arch_wifi_connect_timeout_ms("panoulu", NULL, CYW43_AUTH_OPEN, 30*1000)) {
+            printf("Failed to connect\n");
+        }
+        else {
+            printf("Connected to panoulu\n");
+        }
+    }
+  
 }
