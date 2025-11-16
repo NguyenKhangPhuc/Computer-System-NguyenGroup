@@ -553,8 +553,33 @@ uint32_t veml6030_read_light() {
     //            Kerro arvo sopivalla kertoimella huomioiden 100 ms integraatioaika ja vahvistus 1/8
     //            käyttäen VEML6030-sovellussuunnitteluasiakirjan sivun 5 tietoja:https://www.vishay.com/docs/84367/designingveml6030.pdf
     //            Lopuksi tallenna arvo muuttujaan luxVal_uncorrected.
-  
+    //init_i2c_default();
+
+    uint8_t txBuffer[1]; // Now we send one byte
+    uint8_t rxBuffer[2]; // Now we receive two bytes
+
+    txBuffer [0] = VEML6030_ALS_REG; 
+
+    
+
     uint32_t luxVal_uncorrected = 0; 
+
+        if(i2c_write_blocking(i2c_default, VEML6030_I2C_ADDR , txBuffer, 1, true) != PICO_ERROR_GENERIC) {
+            if(i2c_read_blocking(i2c_default, VEML6030_I2C_ADDR, rxBuffer, 2, false) != PICO_ERROR_GENERIC) {                
+                // Changing the 2-byte data in rxBuffer
+                // into a temperature value (formula in exercise material)
+                //PART OF THE LAB SESSION.
+                uint16_t raw = ((uint16_t) rxBuffer[1] << 8) | rxBuffer[0];
+                luxVal_uncorrected = raw * 0.5376;
+
+                // Temperature value to console window
+                //printf("%f", luxVal_uncorrected);
+            }
+        }
+        else {
+            printf("I2C Bus fault\n");
+        }
+
     if (luxVal_uncorrected>1000){
         // Polynomial is pulled from pg 10 of the datasheet. 
         // See https://github.com/sparkfun/SparkFun_Ambient_Light_Sensor_Arduino_Library/blob/efde0817bd6857863067bd1653a2cfafe6c68732/src/SparkFun_VEML6030_Ambient_Light_Sensor.cpp#L409

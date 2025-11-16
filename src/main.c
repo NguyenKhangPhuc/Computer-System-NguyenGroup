@@ -1,5 +1,4 @@
 #include <stdio.h>
-#include <string.h>
 #include <pico/stdio.h>
 
 #include <FreeRTOS.h>
@@ -45,7 +44,10 @@ struct InitialTemp {
 
 struct InitialTemp tempThreshold = {0};
 
-
+// Initialize light sensor
+uint32_t ambientLight;
+static bool light_button_pressed = false; 
+const uint32_t LIGHT_THRESHOLD = 5; //
 
 // Initialize the variable with struct type above to be a default value = 0.
 struct Message imuMorseMessage = {0};
@@ -71,6 +73,8 @@ static void buzzer_music_play();
 static void lcd_display_task(void *args);
 static void serial_receive_task(void *arg);
 static void display_controller_task(void *args);
+//prototype for light sensor
+void light_sensor_task(void *pvParameters);
 
 
 int main() {
@@ -90,7 +94,11 @@ int main() {
     init_button1();
     init_button2();
     init_rgb_led();
+    rgb_led_write(0, 0, 0);
+    
     init_buzzer();
+    // Initialize light sensor
+    init_veml6030();
 
     init_display();
     // Check the connection the ICM-42670 sensor (0=success, otherwise fail the connection).
@@ -114,6 +122,9 @@ int main() {
     TaskHandle_t hIMUTask = NULL;
     TaskHandle_t hReceiveTask;
     
+    TaskHandle_t hLightTask = NULL;
+
+    
 
     TaskHandle_t buzzerTask = NULL;
     TaskHandle_t serialReceiveTask = NULL;
@@ -121,12 +132,16 @@ int main() {
     TaskHandle_t displayControllerTask = NULL;
     // Create all task with priority 2, no args.
     BaseType_t result = xTaskCreate(serial_send_task, "serialSendTask", 2048, NULL, 2, &serialSendTask);
+
     xTaskCreate(display_controller_task, "displayControllerTask", 1024, NULL, 2, &displayControllerTask);
     xTaskCreate(rgb_task, "RGBTask", 256, (void*) displayControllerTask, 2, NULL);
     xTaskCreate(buzzer_task,"BuzzerTask", 1024, (void*) displayControllerTask, 2, NULL );
     
     xTaskCreate(imu_task, "IMUTask", 1024, NULL, 3, &hIMUTask);
     // xTaskCreate(buzzer_task, "buzzerTask", 1024, NULL, 2, &buzzerTask);
+
+    xTaskCreate(light_sensor_task, "LightTask", 512, NULL, 2, &hLightTask);
+
     xTaskCreate(serial_receive_task, "serialReceiveTask", 1024, NULL, 2, &serialReceiveTask);
     xTaskCreate(lcd_display_task, "lcdTask", 1024, (void*) displayControllerTask, 2, &lcdDisplay);
     // Start to run and schedule the task
@@ -203,7 +218,7 @@ static void btn_fxn(uint gpio, uint32_t eventMask){
             imuMorseMessage.message[imuMorseMessage.currentIndex] = '\0';
             // Set the programState to be SEND_DATA to send it to serial monitor
             programState = SEND_DATA;
-        }else if(programState == DATA_READY) {
+        }else if(programState == DATA_READY||programState == WAITING_DATA) {
             // If we just received a morse character from imu and there exists no 2 consecutive spaces
             // Then we put a space in the current position in morse string
             imuMorseMessage.message[imuMorseMessage.currentIndex] = ' ';
@@ -482,4 +497,51 @@ void wirelessTask(void *pvParams) {
         }
     }
   
+}
+
+void light_sensor_task(void *pvParameters) {
+    (void)pvParameters;
+
+
+    while (1) {
+        if (programState == DATA_READY || programState == SPACES_REQUIREMENTS_SATISFIED || programState == WAITING_DATA) {
+            
+            ambientLight = veml6030_read_light(); 
+
+            if (ambientLight < LIGHT_THRESHOLD) {
+                
+                if (!light_button_pressed) {
+                    
+                    if (programState == SPACES_REQUIREMENTS_SATISFIED) {
+                        imuMorseMessage.message[imuMorseMessage.currentIndex] = '\n';
+                        imuMorseMessage.currentIndex += 1;
+                        imuMorseMessage.message[imuMorseMessage.currentIndex] = '\0';
+                        programState = SEND_DATA; 
+                    }
+                    
+                    else {
+                        imuMorseMessage.message[imuMorseMessage.currentIndex] = ' ';
+                        printf("Light Button: Send space\n");
+                        
+                        if (imuMorseMessage.currentIndex > 0 && imuMorseMessage.message[imuMorseMessage.currentIndex - 1] == ' '){
+                            printf("Light Button: 2 space consecutively\n");
+                            programState = SPACES_REQUIREMENTS_SATISFIED;
+                        } else {
+                            programState = DATA_READY;
+                        }
+                        
+                        imuMorseMessage.currentIndex += 1;
+                    }
+
+                    light_button_pressed = true; 
+                }
+            } 
+            else {
+                light_button_pressed = false; 
+            }
+        } else {
+            light_button_pressed = false;
+        }
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
 }
