@@ -47,7 +47,7 @@ struct InitialTemp tempThreshold = {0};
 // Initialize light sensor
 uint32_t ambientLight;
 static bool light_button_pressed = false; 
-const uint32_t LIGHT_THRESHOLD = 5; //
+const uint32_t LIGHT_THRESHOLD = 5; // When pressing on light sensor, value <=5
 
 // Initialize the variable with struct type above to be a default value = 0.
 struct Message imuMorseMessage = {0};
@@ -504,13 +504,12 @@ void light_sensor_task(void *pvParameters) {
 
 
     while (1) {
-        if (programState == DATA_READY || programState == SPACES_REQUIREMENTS_SATISFIED || programState == WAITING_DATA) {
+        if (programState == DATA_READY || programState == SPACES_REQUIREMENTS_SATISFIED) {
             
             ambientLight = veml6030_read_light(); 
-
+            printf("light sensor %u\n", ambientLight);
             if (ambientLight < LIGHT_THRESHOLD) {
-                
-                if (!light_button_pressed) {
+
                     
                     if (programState == SPACES_REQUIREMENTS_SATISFIED) {
                         imuMorseMessage.message[imuMorseMessage.currentIndex] = '\n';
@@ -523,25 +522,21 @@ void light_sensor_task(void *pvParameters) {
                         imuMorseMessage.message[imuMorseMessage.currentIndex] = ' ';
                         printf("Light Button: Send space\n");
                         
-                        if (imuMorseMessage.currentIndex > 0 && imuMorseMessage.message[imuMorseMessage.currentIndex - 1] == ' '){
-                            printf("Light Button: 2 space consecutively\n");
+                        if ( imuMorseMessage.message[imuMorseMessage.currentIndex - 1] == ' '){
+                            printf("Light Button: 2 spaces consecutively\n");
                             programState = SPACES_REQUIREMENTS_SATISFIED;
+                            
                         } else {
                             programState = DATA_READY;
                         }
-                        
                         imuMorseMessage.currentIndex += 1;
+                        vTaskDelay(pdMS_TO_TICKS(2000));
+                        
                     }
-
-                    light_button_pressed = true; 
                 }
-            } 
-            else {
-                light_button_pressed = false; 
-            }
-        } else {
-            light_button_pressed = false;
-        }
-        vTaskDelay(pdMS_TO_TICKS(50));
+        
+            
+        } 
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
