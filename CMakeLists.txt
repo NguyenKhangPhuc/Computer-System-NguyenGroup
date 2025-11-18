@@ -84,20 +84,21 @@ add_subdirectory(libs/usb-serial-debug)
 # DO NOT EDIT: Prepare build to compile the different examples ==================================
 # Add examples if necessary here
 # Uncomment the examples that you want to include in your project.
-#
-# add_subdirectory(examples/hello_blink)
-# add_subdirectory(examples/hello_blink_freertos)
-# add_subdirectory(examples/hello_pico)
-# add_subdirectory(examples/hello_freertos)
-# add_subdirectory(examples/hello_dual_cdc)
-# add_subdirectory(examples/hello_microphone)
-# add_subdirectory(examples/compilation_errors)
+
+add_subdirectory(examples/hello_blink)
+add_subdirectory(examples/hello_blink_freertos)
+add_subdirectory(examples/hello_pico)
+add_subdirectory(examples/hello_freertos)
+add_subdirectory(examples/hello_dual_cdc)
+add_subdirectory(examples/hello_microphone)
+add_subdirectory(examples/compilation_errors)
 add_subdirectory(examples/hello_hat)
 # add_subdirectory(examples/hat_example)
 add_subdirectory(examples/hat_imu_ex)
 add_subdirectory(examples/hat_imu_cdc_ex)
 add_subdirectory(examples/hello_serial_client)
 add_subdirectory(examples/hello_serial_bidirectional_client)
+add_subdirectory(examples/pico_w)
 #
 # You can edit it if you want to add new examples
 # ==============================================================================================
@@ -112,6 +113,7 @@ add_subdirectory(examples/hello_serial_bidirectional_client)
 add_executable(${MAIN_TARGET}
     src/main.c
 )
+target_include_directories(${MAIN_TARGET} PRIVATE src)
 
 # Links. Add all libraries that application is using. It must at least use the pico_stdlib
 # In addition, for the course project you are using at least:
@@ -125,13 +127,14 @@ target_link_libraries(${MAIN_TARGET}
         FreeRTOS-Kernel
         FreeRTOS-Kernel-Heap4
         TKJHAT_SDK
+        pico_cyw43_arch_lwip_sys_freertos
 )
 
 # Include libraries necessaries to control the WiFi. If you are using the internal pico LED in W model, it is also 
 # necessary 
-if (PICO_CYW43_SUPPORTED)
-    target_link_libraries(${MAIN_TARGET} pico_cyw43_arch_none)
-endif()
+# if (PICO_CYW43_SUPPORTED)
+#     target_link_libraries(${MAIN_TARGET} pico_cyw43_arch_none)
+# endif()
 
 #Support for stdio (printf, fwrite, puts...) via usb or UART. 
 pico_enable_stdio_usb(${MAIN_TARGET} 1)

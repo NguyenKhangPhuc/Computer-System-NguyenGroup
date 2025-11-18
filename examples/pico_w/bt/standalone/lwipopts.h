@@ -1,29 +1,13 @@
-#ifndef _LWIPOPTS_EXAMPLE_COMMONH_H
-#define _LWIPOPTS_EXAMPLE_COMMONH_H
+#ifndef _LWIPOPTS_H
+#define _LWIPOPTS_H
 
+// see https://www.nongnu.org/lwip/2_1_x/group__lwip__opts.html for details
 
-// Common settings used in most of the pico_w examples
-// (see https://www.nongnu.org/lwip/2_1_x/group__lwip__opts.html for details)
-
-// allow override in some examples
-#ifndef NO_SYS
-#define NO_SYS                      0
-#endif
-// allow override in some examples
-#ifndef LWIP_SOCKET
-#define LWIP_SOCKET                 1
-#endif
-#if PICO_CYW43_ARCH_POLL
-#define MEM_LIBC_MALLOC             1
-#else
-// MEM_LIBC_MALLOC is incompatible with non polling versions
+#define NO_SYS                      1
+#define LWIP_SOCKET                 0
 #define MEM_LIBC_MALLOC             0
-#endif
-#define LWIP_TIMEVAL_PRIVATE 0
 #define MEM_ALIGNMENT               4
-#ifndef MEM_SIZE
 #define MEM_SIZE                    4000
-#endif
 #define MEMP_NUM_TCP_SEG            32
 #define MEMP_NUM_ARP_QUEUE          10
 #define PBUF_POOL_SIZE              24
@@ -38,12 +22,11 @@
 #define LWIP_NETIF_STATUS_CALLBACK  1
 #define LWIP_NETIF_LINK_CALLBACK    1
 #define LWIP_NETIF_HOSTNAME         1
-#define LWIP_NETCONN                1
+#define LWIP_NETCONN                0
 #define MEM_STATS                   0
 #define SYS_STATS                   0
 #define MEMP_STATS                  0
 #define LINK_STATS                  0
-// #define ETH_PAD_SIZE                2
 #define LWIP_CHKSUM_ALGORITHM       3
 #define LWIP_DHCP                   1
 #define LWIP_IPV4                   1
