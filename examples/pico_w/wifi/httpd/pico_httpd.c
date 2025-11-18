@@ -11,6 +11,7 @@
 #include "lwip/apps/mdns.h"
 #include "lwip/init.h"
 #include "lwip/apps/httpd.h"
+#include <httpd.h>
 
 void httpd_init(void);
 
