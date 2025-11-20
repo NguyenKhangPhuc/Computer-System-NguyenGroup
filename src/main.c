@@ -67,6 +67,8 @@ void rgb_task(void *pvParameters);
 void buzzer_task(void *pvParameters);
 void translate_receives_morse_codes(void);
 char find_letter_from_morse_code(char *morseCode);
+void sending_feedback();
+// static void buzzer_task(void *arg);
 static void buzzer_music_play();
 static void lcd_display_task(void *args);
 static void serial_receive_task(void *arg);
@@ -171,6 +173,8 @@ static void serial_send_task(void *arg){
     while(1){
         // If the progrramState is SEND_DATA -> Send the morsee string to serial monitor.
         if (programState == SEND_DATA){
+            // Send feedback (buzzer)
+            sending_feedback();
             // Send the morse string
             printf("__Receive morse message %s __\n", imuMorseMessage.message);
             // Reset the morse string index = 0
@@ -461,6 +465,12 @@ static void display_controller_task(void *args){
             printf("__3 task display finished__\n");
         }
     }
+
+
+}
+
+void sending_feedback() {
+    buzzer_play_tone(440, 500);
 }
 
 
