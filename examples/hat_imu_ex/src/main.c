@@ -39,7 +39,7 @@ void imu_task(void *pvParameters) {
         } else {
             printf("Failed to read imu data\n");
         }
-        vTaskDelay(pdMS_TO_TICKS(500));
+        vTaskDelay(pdMS_TO_TICKS(200));
     }
 
 }
