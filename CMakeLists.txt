@@ -127,14 +127,14 @@ target_link_libraries(${MAIN_TARGET}
         FreeRTOS-Kernel
         FreeRTOS-Kernel-Heap4
         TKJHAT_SDK
-        pico_cyw43_arch_lwip_sys_freertos
+        pico_cyw43_arch_lwip_threadsafe_background
 )
 
 # Include libraries necessaries to control the WiFi. If you are using the internal pico LED in W model, it is also 
 # necessary 
-# if (PICO_CYW43_SUPPORTED)
-#     target_link_libraries(${MAIN_TARGET} pico_cyw43_arch_none)
-# endif()
+if (PICO_CYW43_SUPPORTED)
+    target_link_libraries(${MAIN_TARGET} pico_cyw43_arch_none)
+endif()
 
 #Support for stdio (printf, fwrite, puts...) via usb or UART. 
 pico_enable_stdio_usb(${MAIN_TARGET} 1)
