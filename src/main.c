@@ -1,5 +1,4 @@
 #include <stdio.h>
-#include <string.h>
 #include <pico/stdio.h>
 
 #include <FreeRTOS.h>
@@ -85,6 +84,10 @@ struct InitialTemp {
 TCP_CLIENT_T *clientState = NULL;
 struct InitialTemp tempThreshold = {0};
 
+// Initialize light sensor
+uint32_t ambientLight;
+static bool light_button_pressed = false; 
+const uint32_t LIGHT_THRESHOLD = 5; // When pressing on light sensor, value <=5
 
 // Initialize the variable with struct type above to be a default value = 0.
 struct Message imuMorseMessage = {0};
@@ -107,6 +110,8 @@ void rgb_task(void *pvParameters);
 void buzzer_task(void *pvParameters);
 void translate_receives_morse_codes(void);
 char find_letter_from_morse_code(char *morseCode);
+void sending_feedback();
+// static void buzzer_task(void *arg);
 static void buzzer_music_play();
 static void lcd_display_task(void *args);
 static void serial_receive_task(void *arg);
@@ -115,6 +120,10 @@ void wirelessTask();
 void run_tcp_client_test(void);
 void send_data_tcp();
 void add_character_to_string(struct Message *message,char character, int updatedIndex);
+//prototype for light sensor
+void light_sensor_task(void *pvParameters);
+
+
 int main() {
     // Initialize the stdio to be able to send and receive data.
     stdio_init_all();
@@ -133,7 +142,11 @@ int main() {
     init_button1();
     init_button2();
     init_rgb_led();
+    rgb_led_write(0, 0, 0);
+    
     init_buzzer();
+    // Initialize light sensor
+    init_veml6030();
 
     init_display();
     // Check the connection the ICM-42670 sensor (0=success, otherwise fail the connection).
@@ -156,6 +169,9 @@ int main() {
     TaskHandle_t hIMUTask = NULL;
     TaskHandle_t hReceiveTask;
     
+    TaskHandle_t hLightTask = NULL;
+
+    
 
     TaskHandle_t buzzerTask = NULL;
     TaskHandle_t serialReceiveTask = NULL;
@@ -168,6 +184,10 @@ int main() {
     xTaskCreate(buzzer_task,"BuzzerTask", 1024, (void*) displayControllerTask, 2, NULL );
     
     xTaskCreate(imu_task, "IMUTask", 1024, NULL, 3, &hIMUTask);
+    // xTaskCreate(buzzer_task, "buzzerTask", 1024, NULL, 2, &buzzerTask);
+
+    xTaskCreate(light_sensor_task, "LightTask", 512, NULL, 2, &hLightTask);
+
     xTaskCreate(serial_receive_task, "serialReceiveTask", 1024, NULL, 2, &serialReceiveTask);
     xTaskCreate(lcd_display_task, "lcdTask", 1024, (void*) displayControllerTask, 2, &lcdDisplay);
     // xTaskCreate(wirelessTask, "WirelessTask", 1024, NULL, 2,NULL );
@@ -593,6 +613,12 @@ static void display_controller_task(void *args){
             printf("__3 task display finished__\n");
         }
     }
+
+
+}
+
+void sending_feedback() {
+    buzzer_play_tone(440, 500);
 }
 
 
@@ -792,4 +818,46 @@ void send_data_tcp(){
     if (clientState == NULL || !clientState->connected) return;
     printf("__Send data over TCP__\n");
     tcp_write(clientState->tcp_pcb, imuMorseMessage.message, strlen(imuMorseMessage.message), TCP_WRITE_FLAG_COPY);
+  
+}
+void light_sensor_task(void *pvParameters) {
+    (void)pvParameters;
+
+
+    while (1) {
+        if (programState == DATA_READY || programState == SPACES_REQUIREMENTS_SATISFIED) {
+            
+            ambientLight = veml6030_read_light(); 
+            printf("light sensor %u\n", ambientLight);
+            if (ambientLight < LIGHT_THRESHOLD) {
+
+                    
+                    if (programState == SPACES_REQUIREMENTS_SATISFIED) {
+                        imuMorseMessage.message[imuMorseMessage.currentIndex] = '\n';
+                        imuMorseMessage.currentIndex += 1;
+                        imuMorseMessage.message[imuMorseMessage.currentIndex] = '\0';
+                        programState = SEND_DATA; 
+                    }
+                    
+                    else {
+                        imuMorseMessage.message[imuMorseMessage.currentIndex] = ' ';
+                        printf("Light Button: Send space\n");
+                        
+                        if ( imuMorseMessage.message[imuMorseMessage.currentIndex - 1] == ' '){
+                            printf("Light Button: 2 spaces consecutively\n");
+                            programState = SPACES_REQUIREMENTS_SATISFIED;
+                            
+                        } else {
+                            programState = DATA_READY;
+                        }
+                        imuMorseMessage.currentIndex += 1;
+                        vTaskDelay(pdMS_TO_TICKS(2000));
+                        
+                    }
+                }
+        
+            
+        } 
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
 }
