@@ -69,6 +69,9 @@
         "freertos.h": "c",
         "pdm_microphone.h": "c",
         "pins.h": "c",
-        "cyw43_arch.h": "c"
-    }
+        "cyw43_arch.h": "c",
+        "math.h": "c",
+        "tcp.h": "c"
+    },
+    "C_Cpp.errorSquiggles": "enabled"
 }
