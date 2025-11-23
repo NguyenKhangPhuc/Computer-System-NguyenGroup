@@ -186,7 +186,7 @@ static void display_controller_task(void *args);
 // Function to connect to the wifi.
 void wirelessTask();
 // Function to connect to the remote tcp server
-void run_tcp_client_test(void);
+void connect_to_tcp(void);
 // Function to send the data to the tcp server
 void send_data_tcp();
 // Function to add the character to the string and update the index.
@@ -844,7 +844,7 @@ void wirelessTask()
     }
 
     printf("__Run test__\n");
-    run_tcp_client_test();
+    connect_to_tcp();
 }
 
 static err_t tcp_client_close(void *arg)
@@ -1027,7 +1027,7 @@ static TCP_CLIENT_T *tcp_client_init(void)
     ip4addr_aton(TEST_TCP_SERVER_IP, &clientState->remote_addr);
     return clientState;
 }
-void run_tcp_client_test(void)
+void connect_to_tcp(void)
 {
     TCP_CLIENT_T *clientState = tcp_client_init();
     if (!clientState)
