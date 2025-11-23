@@ -593,7 +593,6 @@ uint32_t veml6030_read_light() {
 }
 
 
-
 //This method might be utility method in the future.
 static uint16_t _veml6030_read_register(uint8_t reg) {
     uint8_t data[2] = {0,0};
