@@ -792,6 +792,12 @@ static void display_controller_task(void *args)
             printf("__3 task display finished__\n");
         }
     }
+
+
+}
+
+void sending_feedback() {
+    buzzer_play_tone(440, 500);
 }
 
 void sending_feedback()
