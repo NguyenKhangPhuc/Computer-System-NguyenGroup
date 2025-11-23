@@ -364,9 +364,17 @@ static void btn_fxn(uint gpio, uint32_t eventMask)
     // Check if the button pressed is button1 or button2
     if (gpio == BUTTON1)
     {
-        // If button1 -> set the state to WAITING_DATA to received IMU sensor data
-        programState = WAITING_DATA;
-        printf("__Start to read sensor data__\n");
+        // If programState is not DISPLAY
+        if (programState != DISPLAY)
+        {
+            // If button1 -> set the state to WAITING_DATA to received IMU sensor data
+            programState = WAITING_DATA;
+            printf("__Start to read sensor data__\n");
+        }
+        else
+        {
+            printf("__ Already in display mode, please wait until finished__\n");
+        }
     }
     else if (gpio == BUTTON2)
     {
@@ -738,19 +746,30 @@ static void lcd_display_task(void *pvParameters)
             // Clear the display
             clear_display();
             // Create the sliding window with the size of 9 -> showing 9 character each loop.
-            for (int i = 0; i <= length - WINDOW_SIZE; i++)
+            if (length <= WINDOW_SIZE)
             {
-                // Copy the from the current i to character at position i + WINDOWSIZE - 1 to the display string
-                memcpy(displayString, &translatedMessage.message[i], WINDOW_SIZE);
-                // Set the position at WINDOW_SIZE = '\0' to terminate the string.
-                displayString[WINDOW_SIZE] = '\0';
-                printf("__Display string %s__\n", displayString);
-                // Write the display string to the lcd for 500ms
-                write_text(displayString);
+                printf("__translated message: %s__\n", translatedMessage.message);
+                write_text(translatedMessage.message);
                 vTaskDelay(pdMS_TO_TICKS(500));
-                // Clear the display after that.
                 clear_display();
             }
+            else
+            {
+                for (int i = 0; i <= length - WINDOW_SIZE; i++)
+                {
+                    // Copy the from the current i to character at position i + WINDOWSIZE - 1 to the display string
+                    memcpy(displayString, &translatedMessage.message[i], WINDOW_SIZE);
+                    // Set the position at WINDOW_SIZE = '\0' to terminate the string.
+                    displayString[WINDOW_SIZE] = '\0';
+                    printf("__Display string %s__\n", displayString);
+                    // Write the display string to the lcd for 500ms
+                    write_text(displayString);
+                    vTaskDelay(pdMS_TO_TICKS(500));
+                    // Clear the display after that.
+                    clear_display();
+                }
+            }
+
             // After finishing showing sliding text -> write back to Waiting... string
             write_text("Waiting...");
             // Notify the display controller task that lcd task is finish
@@ -792,12 +811,6 @@ static void display_controller_task(void *args)
             printf("__3 task display finished__\n");
         }
     }
-
-
-}
-
-void sending_feedback() {
-    buzzer_play_tone(440, 500);
 }
 
 void sending_feedback()
